@@ -87,3 +87,4 @@ xgboost==3.0.5
 xlsxwriter==3.2.9
 yfinance==1.2.0
 pandas-ta==0.4.71b0
+lightgbm==4.6.0
