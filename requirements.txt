@@ -90,3 +90,5 @@ pandas-ta==0.4.71b0
 lightgbm==4.6.0
 hyperopt==0.2.7
 setuptools==69.5.1
+ccxt==4.5.45
+python_binance==1.0.36
