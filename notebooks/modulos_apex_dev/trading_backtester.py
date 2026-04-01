@@ -12,10 +12,12 @@ class Backtester:
     Clase para realizar Backtesting con Stop Trailing como estrategia de riesgo.
     """
 
-    def __init__(self, df_test, capital_inicial=1000.0):
+    def __init__(self, df_test, capital_inicial=1000.0, buy_fee=0.001, sell_fee=0.001):
         # Guardamos los datos y configuraciones iniciales como atributos de la clase
         self.df_base = df_test.copy()
         self.capital_inicial = capital_inicial
+        self.buy_fee = buy_fee
+        self.sell_fee = sell_fee
 
     def backtest_con_trailing_stop(
             self,
@@ -66,7 +68,7 @@ class Backtester:
                 # Revisar si el precio cayó y tocó el Stop Loss (Inicial o Trailing)
                 if precio_actual <= nivel_stop_loss:
                     precio_ejecucion = nivel_stop_loss
-                    capital_actual += cantidad_btc * precio_ejecucion
+                    capital_actual += (cantidad_btc * (1 - self.sell_fee)) * precio_ejecucion
 
                     tipo_venta = 'Venta (Trailing Stop)' if nivel_stop_loss > (precio_compra * (1 - stop_loss_inicial)) else 'Venta (Stop Inicial)'
 
@@ -80,7 +82,7 @@ class Backtester:
             # --- 2. LÓGICA DE COMPRA ---
             if señal == -1 and not posicion_abierta:
                 monto_invertir = capital_actual * tamaño_posicion
-                cantidad_btc = monto_invertir / precio_actual
+                cantidad_btc = (monto_invertir * (1-self.buy_fee)) / precio_actual
                 capital_actual -= monto_invertir
                 precio_compra = precio_actual
                 posicion_abierta = True
@@ -95,12 +97,12 @@ class Backtester:
                 
             # --- 3. LÓGICA DE VENTA (POR SEÑAL DEL MODELO) ---
             elif señal == 1 and posicion_abierta:
-                capital_actual += cantidad_btc * precio_actual
+                capital_actual += (cantidad_btc * (1-self.sell_fee)) * precio_actual
                 historial_trades.append({'Fecha': fecha, 'Tipo': 'Venta (Señal Modelo)', 'Precio': precio_actual, 'Capital': capital_actual})
                 posicion_abierta = False
                 
             # --- 4. ACTUALIZACIÓN DEL PORTAFOLIO DIARIO ---
-            valor_portafolio = capital_actual + (cantidad_btc * precio_actual if posicion_abierta else 0)
+            valor_portafolio = capital_actual + ((cantidad_btc * (1-self.sell_fee)) * precio_actual if posicion_abierta else 0)
             evolucion_capital.append(valor_portafolio)
             
         # --- FIN DEL CICLO, RESULTADOS ---
