@@ -1,4 +1,6 @@
-#################### INICIO DE LA CLASE BTC_DataExtractor #####################
+#################### INICIO DE LA CLASE - #####################
+import ccxt
+from datetime import timedelta
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -7,33 +9,55 @@ import pandas_ta as ta
 import warnings
 warnings.filterwarnings("ignore")
 
-class BTC_DataExtractor:
-    """
-    Clase para extraer la información de BTC, indicadores técnicos y macroeconómicos.
-        - Extrae datos de Yahoo Finance.
-        - Calcula indicadores técnicos avanzados usando pandas_ta.
-        - Etiqueta puntos críticos (máximos y mínimos locales) para el target.
-        - Agrega contexto macroeconómico (S&P 500, DXY, Oro)
-
-    """
-
-    def __init__(self, fecha_inicio, fecha_fin, ventana_critica=5):
-        self.fecha_inicio = fecha_inicio
-        self.fecha_fin = fecha_fin
+class ExtractorDatosCCXT:
+    def __init__(self, exchange_id='binance', symbol='BTC/USDT', timeframe='1d', ventana_critica=5):
+        # Instanciamos el exchange dinámicamente
+        self.exchange = getattr(ccxt, exchange_id)({
+            'enableRateLimit': True, # Crucial para que el exchange no nos bloquee la IP
+        })
+        self.symbol = symbol
         self.ventana_critica = ventana_critica
+        self.timeframe = timeframe
 
-    def obtener_datos_btc(self):
-        """Extrae datos de Yahoo Finance y calcula features básicas."""
-
-        print(f"Descargando datos de BTC-USD desde {self.fecha_inicio}...")
-        btc = yf.download("BTC-USD", start=self.fecha_inicio, end=self.fecha_fin)
+    def obtener_datos(self, start_date, end_date, buffer_dias=40):
+        # 1. Lógica de Over-fetch
+        dt_start_objetivo = pd.to_datetime(start_date)
+        dt_end = pd.to_datetime(end_date)
+        dt_fetch_real = dt_start_objetivo - timedelta(days=buffer_dias)
         
-        if isinstance(btc.columns, pd.MultiIndex):
-            btc.columns = btc.columns.get_level_values(0)
-
-        df = btc[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
-        df.dropna(inplace=True)
+        # Convertimos a milisegundos (formato requerido por ccxt)
+        since_ms = self.exchange.parse8601(dt_fetch_real.strftime('%Y-%m-%dT00:00:00Z'))
+        end_ms = self.exchange.parse8601(dt_end.strftime('%Y-%m-%dT23:59:59Z'))
         
+        todos_los_datos = []
+        
+        # 2. Paginación segura (Bucle para extraer todo el historial necesario)
+        print(f"[CCXT] Descargando {self.symbol} desde {dt_fetch_real.strftime('%Y-%m-%d')}...")
+        while since_ms < end_ms:
+            # fetch_ohlcv devuelve [Timestamp, Open, High, Low, Close, Volume]
+            velas = self.exchange.fetch_ohlcv(self.symbol, self.timeframe, since=since_ms)
+            
+            if not velas:
+                break
+                
+            # Filtramos para no pasarnos de la fecha final
+            velas_validas = [v for v in velas if v[0] <= end_ms]
+            todos_los_datos.extend(velas_validas)
+            
+            if len(velas) > 0:
+                # Avanzamos el puntero de tiempo para la siguiente llamada
+                since_ms = velas[-1][0] + 1
+            else:
+                break
+                
+        # 3. Construcción y limpieza del DataFrame
+        df = pd.DataFrame(todos_los_datos, columns=['Date', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        df['Date'] = pd.to_datetime(df['Date'], unit='ms')
+        df.set_index('Date', inplace=True)
+        
+        for col in df.columns:
+            df[col] = pd.to_numeric(df[col])
+                    
         # Feature básica: Retornos logarítmicos
         df['Retorno_Log'] = np.log(df['Close'] / df['Close'].shift(1))
         return df
@@ -165,7 +189,7 @@ class BTC_DataExtractor:
             print(f"-> Descargando {nombre} ({ticker})...")
             data = yf.download(ticker, start=fecha_inicio, end=fecha_fin, progress=False)
             
-            # Limpieza del MultiIndex de yfinance (como hicimos con BTC)
+            # Limpieza del MultiIndex de yfinance
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
                 
