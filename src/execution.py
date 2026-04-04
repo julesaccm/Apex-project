@@ -1,50 +1,70 @@
 import ccxt
 import json
 import os
+import boto3
+from botocore.exceptions import ClientError
 
 class BinanceExecutor:
-    def __init__(self, api_key, api_secret, testnet=True, state_file='data/trade_state.json'):
+    def __init__(self, api_key, api_secret, bucket_name, testnet=True):
         self.exchange = ccxt.binance({
             'apiKey': api_key,
             'secret': api_secret,
             'enableRateLimit': True,
         })
-        self.state_file = state_file
         
-        # Redirigir la conexión a la red de pruebas
+        # Configuración de S3
+        self.s3 = boto3.client('s3')
+        self.bucket_name = bucket_name
+        self.s3_key_name = 'trade_state.json'       # Así se llamará el archivo en S3
+        self.local_temp_path = '/tmp/trade_state.json' # Única ruta permitida en Serverless
+        
         if testnet:
             self.exchange.set_sandbox_mode(True)
             print("Conectado a Binance TESTNET. Operando con fondos simulados.")
         else:
             print("ADVERTENCIA: CONECTADO A BINANCE REAL. FONDOS EN RIESGO.")
 
-        # Asegurar que la carpeta data exista para el archivo JSON
-        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
-
-    # --- MEMORIA DEL BOT ---
+    # --- NUEVA MEMORIA DEL BOT (EN LA NUBE) ---
     def _cargar_estado(self):
-            """Lee la memoria del bot. Si no existe, crea el archivo físico inmediatamente."""
-            if os.path.exists(self.state_file):
-                with open(self.state_file, 'r') as f:
-                    return json.load(f)
+        """Descarga la memoria desde S3. Si no existe, la crea en la nube."""
+        try:
+            print(f"Buscando memoria en S3 (Bucket: {self.bucket_name})...")
+            # Descargamos de S3 a nuestra carpeta temporal permitida
+            self.s3.download_file(self.bucket_name, self.s3_key_name, self.local_temp_path)
             
-            # Si el código llega aquí, es la primera vez que se ejecuta.
-            # Creamos el estado base y lo escribimos en el disco duro.
-            print(f"Creando archivo de memoria inicial en: {self.state_file}")
-            estado_base = {
-                'posicion_abierta': False, 
-                'precio_compra': 0, 
-                'precio_max_alcanzado': 0, 
-                'nivel_stop_loss': 0, 
-                'cantidad_btc': 0
-            }
-            self._guardar_estado(estado_base)
-            return estado_base
+            with open(self.local_temp_path, 'r') as f:
+                return json.load(f)
+                
+        except ClientError as e:
+            # Si el error es "404 Not Found", significa que es el Día 1 del bot
+            if e.response['Error']['Code'] == "404" or e.response['Error']['Code'] == "NoSuchKey":
+                print(f"Memoria no encontrada en S3. Creando estado inicial...")
+                estado_base = {
+                    'posicion_abierta': False, 
+                    'precio_compra': 0, 
+                    'precio_max_alcanzado': 0, 
+                    'nivel_stop_loss': 0, 
+                    'cantidad_btc': 0
+                }
+                self._guardar_estado(estado_base)
+                return estado_base
+            else:
+                # Si es un error de permisos o de otro tipo, detenemos el programa
+                print(f"Error crítico de AWS S3: {e}")
+                raise e
 
     def _guardar_estado(self, estado):
-        """Guarda la memoria del bot antes de apagarse."""
-        with open(self.state_file, 'w') as f:
+        """Guarda la memoria temporalmente y la sube inmediatamente a S3."""
+        # 1. Guardamos los cambios en el archivo temporal local
+        with open(self.local_temp_path, 'w') as f:
             json.dump(estado, f, indent=4)
+            
+        # 2. Subimos el archivo a S3
+        try:
+            self.s3.upload_file(self.local_temp_path, self.bucket_name, self.s3_key_name)
+            print(f"Memoria sincronizada exitosamente con Amazon S3.")
+        except ClientError as e:
+            print(f"Error al subir la memoria a S3: {e}")
 
     # --- LECTURA DEL EXCHANGE ---
     def verificar_balance(self, moneda='USDT'):

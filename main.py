@@ -63,7 +63,8 @@ def main():
         executor = BinanceExecutor(
             api_key=os.getenv('BINANCE_TESTNET_API_KEY'),
             api_secret=os.getenv('BINANCE_TESTNET_SECRET'),
-            testnet=True # Vital para no usar dinero real todavía
+            bucket_name=os.getenv('AWS_S3_BUCKET_NAME'), # <-- Nueva línea
+            testnet=True
         )
         
         if señal == -1:
@@ -91,3 +92,9 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# --- NUEVO ENCHUFE PARA AWS LAMBDA ---
+def handler(event, context):
+    """Esta es la puerta de entrada que AWS Lambda utilizará."""
+    main()
+    return {"statusCode": 200, "body": "Ejecución de Apex Bot finalizada."}

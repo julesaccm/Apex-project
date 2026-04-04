@@ -1,17 +1,14 @@
-# 1. Usamos una versión ligera de Python 3.13 (la que usaste en tu Mac)
-FROM python:3.13-slim
+# 1. Usamos la imagen base oficial de AWS Lambda para Python 3.13
+FROM public.ecr.aws/lambda/python:3.13
 
-# 2. Definimos la carpeta de trabajo dentro del contenedor
-WORKDIR /app
+# 2. Copiamos el archivo de dependencias a la ruta raíz de Lambda
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
-# 3. Copiamos solo el archivo de requerimientos primero (optimiza el caché de Docker)
-COPY requirements.txt .
-
-# 4. Instalamos las dependencias
+# 3. Instalamos las dependencias
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Copiamos todo el resto de tu código al contenedor
-COPY . .
+# 4. Copiamos todo el código fuente al contenedor
+COPY . ${LAMBDA_TASK_ROOT}
 
-# 6. Comando por defecto al encender el contenedor
-CMD ["python", "main.py"]
+# 5. Le indicamos a Lambda cuál es la función que debe ejecutar como punto de entrada
+CMD [ "main.handler" ]

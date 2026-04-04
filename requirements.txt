@@ -8,3 +8,4 @@ yfinance==1.2.0
 xgboost==3.0.5
 scikit-learn==1.7.1
 dotenv==0.9.9
+boto3==1.42.82
