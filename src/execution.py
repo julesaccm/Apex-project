@@ -85,14 +85,14 @@ class BinanceExecutor:
         
         if estado['posicion_abierta']:
             print("Ya hay una posición abierta. Ignorando señal de compra.")
-            return
+            return {"exito": False}
 
         usdt_disponible = self.verificar_balance('USDT')
         monto_invertir = usdt_disponible * tamaño_posicion
         
         if monto_invertir < 10: # Límite mínimo típico de Binance
             print("Saldo insuficiente para operar.")
-            return
+            return {"exito": False}
 
         print(f"Ejecutando COMPRA de {symbol} por {monto_invertir:.2f} USDT...")
         
@@ -117,15 +117,20 @@ class BinanceExecutor:
             self._guardar_estado(nuevo_estado)
             print(f"Compra exitosa. Precio: {precio_ejecucion}. Stop inicial: {nuevo_estado['nivel_stop_loss']:.2f}")
             
+            return {"exito": True, "precio_compra": precio_ejecucion, "cantidad_comprada": cantidad_comprada, "inversion": monto_invertir, "stop_loss": nuevo_estado['nivel_stop_loss']}
+
         except Exception as e:
             print(f"Error al ejecutar compra: {e}")
+
+        return {"exito": False}
 
     def ejecutar_venta_total(self, symbol, razon="Señal del Modelo"):
         estado = self._cargar_estado()
         
         if not estado['posicion_abierta']:
             print("No hay posiciones abiertas para vender.")
-            return
+
+            return {"exito": False}
             
         btc_disponible = self.verificar_balance(symbol.split('/')[0]) # Obtiene el balance de BTC
         
@@ -142,9 +147,13 @@ class BinanceExecutor:
             
             # Limpiamos la memoria del bot
             self._guardar_estado({'posicion_abierta': False})
+
+            return {"exito": True, "precio_venta": precio_venta, "ganancia_pct": ganancia_pct}
             
         except Exception as e:
             print(f"Error al ejecutar venta: {e}")
+
+            return {"exito": False}
 
     def actualizar_trailing_stops_activos(self, symbol):
         estado = self._cargar_estado()
