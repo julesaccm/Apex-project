@@ -62,34 +62,99 @@ class ExtractorDatosCCXT:
         df['Retorno_Log'] = np.log(df['Close'] / df['Close'].shift(1))
         return df
 
-    def etiquetar_puntos_criticos(self, df, ventana_critica=7):
-        """
-        Etiqueta máximos (1) y mínimos (-1) locales.
-        Un punto es máximo/mínimo si es el extremo en +/- 'ventana' periodos.
-        """
-        # Creamos una copia para no alterar el original durante el cálculo
-        temp_df = df.copy()
+    # def etiquetar_puntos_criticos(self, df, ventana_critica=7, tolerancia_extremo=0.001):
+    #     """
+    #     Etiqueta máximos y mínimos locales en targets separados.
+    #     Detecta tanto puntos extremos exactos como "posibles puntos extremos" cercanos.
         
-        # ventana = self.ventana_critica
-        ventana = ventana_critica
-        # Buscamos el máximo y mínimo en la ventana centrada
-        # center=True permite ver 'ventana' hacia atrás y 'ventana' hacia adelante        
-        temp_df['Max_Local'] = temp_df['High'].rolling(window=ventana*2+1, center=True).max()
-        temp_df['Min_Local'] = temp_df['Low'].rolling(window=ventana*2+1, center=True).min()
+    #     Parameters:
+    #     -----------
+    #     df : pd.DataFrame
+    #         DataFrame con columnas ['High', 'Low']
+    #     ventana_critica : int
+    #         Número de períodos a ambos lados para buscar el extremo (default=7)
+    #     tolerancia_extremo : float
+    #         Tolerancia (%) para considerar un punto "próximo al extremo"
+    #         Ej: 0.001 = 0.1% (detecta puntos a menos del 0.1% del extremo)
+            
+    #     Returns:
+    #     --------
+    #     pd.DataFrame con columnas:
+    #         - target_max_{ventana}P: 2=máximo exacto, 1=próximo a máximo, 0=neutral
+    #         - target_min_{ventana}P: 2=mínimo exacto, 1=próximo a mínimo, 0=neutral
+    #     """
+    #     temp_df = df.copy()
+    #     ventana = ventana_critica
         
-        # Inicializamos la columna Target en 0 (Neutral)
-        temp_df['Target'+f"_{ventana}P"] = 0
+    #     # Calculamos máximos y mínimos en ventana centrada
+    #     temp_df['Max_Local'] = temp_df['High'].rolling(window=ventana*2+1, center=True).max()
+    #     temp_df['Min_Local'] = temp_df['Low'].rolling(window=ventana*2+1, center=True).min()
         
-        # Si el High actual es igual al Max_Local de la ventana, es un máximo (1)
-        temp_df.loc[temp_df['High'] == temp_df['Max_Local'], 'Target'+f"_{ventana}P"] = 1
+    #     # Inicializamos ambos targets en 0 (neutral)
+    #     temp_df[f'target_max_{ventana}P'] = 0
+    #     temp_df[f'target_min_{ventana}P'] = 0
         
-        # Si el Low actual es igual al Min_Local de la ventana, es un mínimo (-1)
-        temp_df.loc[temp_df['Low'] == temp_df['Min_Local'], 'Target'+f"_{ventana}P"] = -1
+    #     # ====== TARGET MÁXIMO ======
+    #     # Máximos exactos (High == Max_Local)
+    #     es_max_exacto = temp_df['High'] == temp_df['Max_Local']
+    #     temp_df.loc[es_max_exacto, f'target_max_{ventana}P'] = 2  # Etiqueta fuerte
         
-        # Limpiamos columnas auxiliares
-        temp_df.drop(columns=['Max_Local', 'Min_Local'], inplace=True)
+    #     # Puntos próximos al máximo (dentro de tolerancia)
+    #     # Diferencia en %: (1 - High/Max) nos da cuán lejos está del máximo
+    #     diferencia_max_pct = 1 - (temp_df['High'] / temp_df['Max_Local'])
+    #     es_max_proximo = (diferencia_max_pct > 0) & (diferencia_max_pct <= tolerancia_extremo) & (~es_max_exacto)
+    #     temp_df.loc[es_max_proximo, f'target_max_{ventana}P'] = 1  # Etiqueta suave
         
-        return temp_df
+    #     # ====== TARGET MÍNIMO ======
+    #     # Mínimos exactos (Low == Min_Local)
+    #     es_min_exacto = temp_df['Low'] == temp_df['Min_Local']
+    #     temp_df.loc[es_min_exacto, f'target_min_{ventana}P'] = 2  # Etiqueta fuerte
+        
+    #     # Puntos próximos al mínimo (dentro de tolerancia)
+    #     # Diferencia en %: (Low/Min - 1) nos da cuán lejos está del mínimo
+    #     diferencia_min_pct = (temp_df['Low'] / temp_df['Min_Local']) - 1
+    #     es_min_proximo = (diferencia_min_pct > 0) & (diferencia_min_pct <= tolerancia_extremo) & (~es_min_exacto)
+    #     temp_df.loc[es_min_proximo, f'target_min_{ventana}P'] = 1  # Etiqueta suave
+        
+    #     # Limpiamos columnas auxiliares
+    #     # temp_df.drop(columns=['Max_Local', 'Min_Local'], inplace=True)
+        
+    #     return temp_df
+
+    # def etiquetar_con_derivada_suavizada(self, df, ventana_suave=3):
+    #     """
+    #     Suaviza la serie primero, luego detecta máximos por primera y segunda derivada.
+    #     Más robusto al ruido de los precios.
+    #     """
+    #     temp_df = df.copy()
+        
+    #     # Suavizar con media móvil exponencial (más peso en datos recientes)
+    #     high_suavizado = temp_df['High'].ewm(span=ventana_suave).mean()
+        
+    #     # Primera derivada de la serie suavizada
+    #     derivada_1 = high_suavizado.diff()
+        
+    #     # Segunda derivada (derivada de la derivada)
+    #     derivada_2 = derivada_1.diff()
+        
+    #     # Máximo: cambio de signo positivo → negativo EN LA PRIMERA DERIVADA
+    #     # Y segunda derivada negativa (confirma que es máximo, no mínimo)
+    #     es_maximo = (
+    #         (derivada_1.shift(1) > 0) &  # Estaba subiendo
+    #         (derivada_1 <= 0) &           # Ahora baja o es flat
+    #         (derivada_2 < 0)              # Curvatura negativa (máximo)
+    #     )
+        
+    #     # Strength: cuánto cambio hay (mayor cambio = máximo más "fuerte")
+    #     strength = abs(derivada_1.shift(1))
+        
+
+    #     # Asignar intensidad: máximos con mayor pendiente anterior = más importantes
+    #     temp_df[f'target_max_dt_{ventana_suave}'] = 0
+    #     temp_df.loc[es_maximo & (strength > strength.quantile(0.9)), f'target_max_dt_{ventana_suave}'] = 2
+    #     temp_df.loc[es_maximo & (strength <= strength.quantile(0.9)), f'target_max_dt_{ventana_suave}'] = 1
+    
+    #     return temp_df
 
     def agregar_indicadores_avanzados(
         self,
