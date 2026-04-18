@@ -41,7 +41,6 @@ Métodos disponibles
 import numpy as np
 import pandas as pd
 from .detector_extremos import etiquetar_extremos_validados
-from .detector_extremos_jerarquico import etiquetar_jerarquico
 
 
 class Labeler:
@@ -59,7 +58,7 @@ class Labeler:
                              Estas columnas son features adicionales muy valiosas.
     """
 
-    VALID_METHODS = ("rolling", "forward", "savgol","savgol-ts")
+    VALID_METHODS = ("rolling", "forward", "savgol")
 
     def __init__(
         self,
@@ -154,62 +153,6 @@ class Labeler:
             df.drop(columns=META_COLS, errors="ignore", inplace=True)
 
         return df
-    
-    # ─────────────────────────────────────────────────────────────────────────
-    # Método 4: Savitzky-Golay + Trend Scanning
-    # ─────────────────────────────────────────────────────────────────────────
-    def _savgol_ts_labels(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Llama a lbl_sg_ts() y mapea sus resultados a los
-        dos targets binarios estándar del pipeline.
-
-        Mapeo:
-
-          sg_max  = (hier == 2) & (tipo ==  1) → target_max = 2
-          ts_max  = (hier == 1) & (tipo ==  1) → target_max = 1
-          sg_min  = (hier == 2) & (tipo == -1) → target_min = 2
-          ts_min  = (hier == 1) & (tipo == -1) → target_min = 1
-          
-          neutral = (hier == 0) | (tipo == 0)  → ambos = 0
-            
-        Las columnas de metadatos (extremo_strength, d1, d2, etc.) se
-        conservan si keep_meta=True: son features adicionales muy útiles
-        (indican la intensidad y curvatura del extremo detectado).
-        """
-
-        resultado = etiquetar_jerarquico(
-            df,
-            ventana_critica = self.ventana,
-            cambio_minimo   = self.cambio_minimo,
-            smooth_poly     = self.smooth_poly
-        )
-
-        df["target_max"] = np.select(
-            [(resultado["label_hier"] == 2) & (resultado["label_tipo"] == 1),
-             (resultado["label_hier"] == 1) & (resultado["label_tipo"] == 1)],
-             [2,1]).astype(int)
-        
-        df["target_min"] = np.select(
-            [(resultado["label_hier"] == 2) & (resultado["label_tipo"] == -1),
-             (resultado["label_hier"] == 1) & (resultado["label_tipo"] == -1)],
-             [2,1]).astype(int)
-
-        META_COLS = ['d1',
-                     'd2',
-                     'label_tipo',
-                     'extremo_tipo',
-                     'extremo_precio',
-                     'pct_change',
-                     'extremo_strength'
-                     ]
-        if self.keep_meta:
-            for col in META_COLS:
-                if col in resultado.columns:
-                    df[col] = resultado[col]
-        else:
-            df.drop(columns=META_COLS, errors="ignore", inplace=True)
-
-        return df
 
     # ─────────────────────────────────────────────────────────────────────────
     # Punto de entrada
@@ -217,20 +160,19 @@ class Labeler:
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Añade target_max y target_min al DataFrame.
-        Con method='savgol' o 'savgol-ts' también añade columnas de metadatos si keep_meta=True.
+        Con method='savgol' también añade columnas de metadatos si keep_meta=True.
         """
         df = df.copy()
 
         dispatch = {
-            "rolling"   : self._rolling_labels,
-            "forward"   : self._forward_labels,
-            "savgol"    : self._savgol_labels,
-            "savgol-ts" : self._savgol_ts_labels
+            "rolling": self._rolling_labels,
+            "forward": self._forward_labels,
+            "savgol" : self._savgol_labels,
         }
         df = dispatch[self.method](df)
 
-        n_max = len(df[df["target_max"]>0])
-        n_min = len(df[df["target_min"]>0])
+        n_max = int(df["target_max"].sum())
+        n_min = int(df["target_min"].sum())
         n_tot = len(df)
         n_neu = n_tot - n_max - n_min
 

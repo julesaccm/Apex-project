@@ -87,6 +87,7 @@ class BTCPipeline:
         include_onchain     : bool  = True,
         drop_low_variance   : bool  = True,
         verbose             : bool  = True,
+        
     ):
         # ── Extractor ────────────────────────────────────────────────────────
         self.extractor = ExtractorDatosCCXT(
