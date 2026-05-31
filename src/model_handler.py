@@ -16,7 +16,10 @@ def cargar_modelo(filepath):
 def predecir_señal(modelo, X_actual, umbral):
     """
     Recibe la última vela cerrada, predice probabilidades y aplica el umbral.
-    Devuelve: -1 (Compra), 1 (Venta), 0 (Mantener/Esperar)
+    Devuelve un diccionario con:
+        - señal: -1 (Compra), 1 (Venta), 0 (Mantener/Esperar)
+        - prob_minimo: Probabilidad de mínimo local (compra)
+        - prob_maximo: Probabilidad de máximo local (venta)
     """
     # 1. Predecir probabilidades
     probabilidades = modelo.predict_proba(X_actual)
@@ -26,15 +29,21 @@ def predecir_señal(modelo, X_actual, umbral):
     idx_minimo = 0  # Probabilidad de clase -1
     idx_maximo = 2  # Probabilidad de clase 1
     
-    prob_compra = probabilidades[0][idx_minimo]
-    prob_venta = probabilidades[0][idx_maximo]
+    prob_minimo = probabilidades[0][idx_minimo]
+    prob_maximo = probabilidades[0][idx_maximo]
     
-    print(f"Probabilidades detectadas -> Compra: {prob_compra:.2f} | Venta: {prob_venta:.2f} | Umbral: {umbral}")
+    print(f"Probabilidades detectadas -> Mínimo (Compra): {prob_minimo:.2f} | Máximo (Venta): {prob_maximo:.2f} | Umbral: {umbral}")
     
     # 3. Lógica de decisión
-    if prob_compra >= umbral:
-        return -1
-    elif prob_venta >= umbral:
-        return 1
+    if prob_minimo >= umbral:
+        señal = -1
+    elif prob_maximo >= umbral:
+        señal = 1
     else:
-        return 0
+        señal = 0
+    
+    return {
+        'señal': señal,
+        'prob_minimo': prob_minimo,
+        'prob_maximo': prob_maximo
+    }
