@@ -6,3 +6,4 @@ data/
 *.ipynb
 notebooks/
 .DS_Store
+*.sh

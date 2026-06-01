@@ -4,3 +4,10 @@ data/
 __pycache__/
 .env
 .DS_Store
+.sh
+.env.example
+*.json
+*.md
+*.yml
+setup.sh
+deploy.sh
