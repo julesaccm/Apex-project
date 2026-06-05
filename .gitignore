@@ -11,3 +11,4 @@ __pycache__/
 *.yml
 setup.sh
 deploy.sh
+*.env
