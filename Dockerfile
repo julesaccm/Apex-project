@@ -10,5 +10,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. Copiamos todo el código fuente al contenedor
 COPY . ${LAMBDA_TASK_ROOT}
 
-# 5. Le indicamos a Lambda cuál es la función que debe ejecutar como punto de entrada
+# 5. Fijar permisos de directorio (sin usar find que no está disponible)
+RUN chmod 755 ${LAMBDA_TASK_ROOT} && \
+    chmod -R 755 ${LAMBDA_TASK_ROOT}/src && \
+    chmod -R 755 ${LAMBDA_TASK_ROOT}/models
+
+# 6. Le indicamos a Lambda cuál es la función que debe ejecutar como punto de entrada
 CMD [ "main.handler" ]
