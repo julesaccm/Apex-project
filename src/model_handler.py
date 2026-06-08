@@ -2,6 +2,7 @@ import joblib
 import pandas as pd
 import numpy as np
 
+
 def cargar_modelo(filepath):
     """
     Carga el diccionario del modelo exportado desde el Jupyter Notebook.
@@ -15,35 +16,50 @@ def cargar_modelo(filepath):
 
 def predecir_señal(modelo, X_actual, umbral):
     """
-    Recibe la última vela cerrada, predice probabilidades y aplica el umbral.
-    Devuelve un diccionario con:
-        - señal: -1 (Compra), 1 (Venta), 0 (Mantener/Esperar)
-        - prob_minimo: Probabilidad de mínimo local (compra)
-        - prob_maximo: Probabilidad de máximo local (venta)
+    Predice probabilidades y aplica el umbral de decisión.
+
+    Retorna un dict con:
+      - señal:      -1 (Compra) | 0 (Esperar) | 1 (Venta)
+      - prob_compra: probabilidad de la clase -1
+      - prob_venta:  probabilidad de la clase  1
+      - clases:      array de clases tal como las conoce el modelo
     """
-    # 1. Predecir probabilidades
     probabilidades = modelo.predict_proba(X_actual)
-    
-    # 2. Asumimos el orden de clases que XGBoost usa internamente [0, 1, 2] -> [-1, 0, 1]
-    # (Asegúrate de que este índice coincida con cómo XGBoost ordenó tus clases originalmente)
-    idx_minimo = 0  # Probabilidad de clase -1
-    idx_maximo = 2  # Probabilidad de clase 1
-    
-    prob_minimo = probabilidades[0][idx_minimo]
-    prob_maximo = probabilidades[0][idx_maximo]
-    
-    print(f"Probabilidades detectadas -> Mínimo (Compra): {prob_minimo:.2f} | Máximo (Venta): {prob_maximo:.2f} | Umbral: {umbral}")
-    
-    # 3. Lógica de decisión
-    if prob_minimo >= umbral:
+
+    # Leer el orden REAL de clases del modelo en lugar de asumir índices fijos.
+    # modelo.classes_ devuelve algo como [-1, 0, 1] o [0, 1, 2] según el entrenamiento.
+    clases = list(modelo.classes_)
+
+    if 0 not in clases or 2 not in clases:
+        raise ValueError(
+            f"El modelo no contiene las clases esperadas (0 y 2). "
+            f"Clases encontradas: {clases}. "
+            f"Revisa la codificación de etiquetas del notebook de entrenamiento."
+        )
+
+    idx_compra = clases.index(0)   # índice real de la clase "Compra"
+    idx_venta  = clases.index(2)    # índice real de la clase "Venta"
+
+    prob_compra = float(probabilidades[0][idx_compra])
+    prob_venta  = float(probabilidades[0][idx_venta])
+
+    print(
+        f"Clases del modelo: {clases} | "
+        f"Prob Compra (idx {idx_compra}): {prob_compra:.4f} | "
+        f"Prob Venta  (idx {idx_venta}):  {prob_venta:.4f} | "
+        f"Umbral: {umbral}"
+    )
+
+    if prob_compra >= umbral:
         señal = -1
-    elif prob_maximo >= umbral:
+    elif prob_venta >= umbral:
         señal = 1
     else:
         señal = 0
-    
+
     return {
-        'señal': señal,
-        'prob_minimo': prob_minimo,
-        'prob_maximo': prob_maximo
+        "señal":      señal,
+        "prob_compra": prob_compra,
+        "prob_venta":  prob_venta,
+        "clases":      clases,
     }
